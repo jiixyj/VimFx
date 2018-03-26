@@ -338,7 +338,7 @@ mode('find', {
   onEnter: ->
 
   onLeave: ({vim}) ->
-    findBar = vim.window.gBrowser.getFindBar()
+    findBar = vim.window.gBrowser.getCachedFindBar()
     findStorage.lastSearchString = findBar._findField.value
     findStorage.busy = false
 
@@ -346,8 +346,10 @@ mode('find', {
     {vim} = args
     switch
       when match.type == 'full'
-        args.findBar = args.vim.window.gBrowser.getFindBar()
-        match.command.run(args)
+        args.vim.window.gBrowser.getFindBar().then (findBar) ->
+          findBar.open()
+          args.findBar = findBar
+          match.command.run(args)
         return true
       when match.type == 'partial'
         return true

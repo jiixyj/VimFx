@@ -885,16 +885,16 @@ helper_find = ({highlight, linksOnly = false}, {vim}) ->
 
   helper_find_from_top_of_viewport(vim, FORWARD, ->
     return unless vim.mode == 'find'
-    findBar = vim.window.gBrowser.getFindBar()
+    vim.window.gBrowser.getFindBar().then (findBar) ->
 
-    mode = if linksOnly then findBar.FIND_LINKS else findBar.FIND_NORMAL
-    findBar.startFind(mode)
-    utils.focusElement(findBar._findField, {select: true})
+      mode = if linksOnly then findBar.FIND_LINKS else findBar.FIND_NORMAL
+      findBar.startFind(mode)
+      utils.focusElement(findBar._findField, {select: true})
 
-    return if linksOnly
-    return unless highlightButton = findBar.getElement('highlight')
-    if highlightButton.checked != highlight
-      highlightButton.click()
+      return if linksOnly
+      return unless highlightButton = findBar.getElement('highlight')
+      if highlightButton.checked != highlight
+        highlightButton.click()
   )
 
 commands.find = helper_find.bind(null, {highlight: false})
@@ -906,46 +906,47 @@ commands.find_links_only = helper_find.bind(null, {linksOnly: true})
 helper_find_again = (direction, {vim}) ->
   return if findStorage.busy
 
-  findBar = vim.window.gBrowser.getFindBar()
-  if findStorage.lastSearchString.length == 0
-    vim.notify(translate('notification.find_again.none'))
-    return
+  vim.window.gBrowser.getFindBar().then (findBar) ->
 
-  findStorage.busy = true
+    if findStorage.lastSearchString.length == 0
+      vim.notify(translate('notification.find_again.none'))
+      return
 
-  helper_mark_last_scroll_position(vim)
-  helper_find_from_top_of_viewport(vim, direction, ->
-    findBar._findField.value = findStorage.lastSearchString
+    findStorage.busy = true
 
-    # `.onFindResult` is temporarily hacked to be able to know when the
-    # asynchronous `.onFindAgainCommand` is done. When PDFs are shown using
-    # PDF.js, `.updateControlState` is called instead of `.onFindResult`, so
-    # hack that one too.
-    originalOnFindResult = findBar.onFindResult
-    originalUpdateControlState = findBar.updateControlState
+    helper_mark_last_scroll_position(vim)
+    helper_find_from_top_of_viewport(vim, direction, ->
+      findBar._findField.value = findStorage.lastSearchString
 
-    findBar.onFindResult = (data) ->
-      # Prevent the find bar from re-opening if there are no matches.
-      data.storeResult = false
-      findBar.onFindResult = originalOnFindResult
-      findBar.updateControlState = originalUpdateControlState
-      findBar.onFindResult(data)
-      callback()
+      # `.onFindResult` is temporarily hacked to be able to know when the
+      # asynchronous `.onFindAgainCommand` is done. When PDFs are shown using
+      # PDF.js, `.updateControlState` is called instead of `.onFindResult`, so
+      # hack that one too.
+      originalOnFindResult = findBar.onFindResult
+      originalUpdateControlState = findBar.updateControlState
 
-    findBar.updateControlState = (args...) ->
-      # Firefox inconsistently _doesn’t_ re-open the find bar if there are no
-      # matches here, so no need to take care of that in this case.
-      findBar.onFindResult = originalOnFindResult
-      findBar.updateControlState = originalUpdateControlState
-      findBar.updateControlState(args...)
-      callback()
+      findBar.onFindResult = (data) ->
+        # Prevent the find bar from re-opening if there are no matches.
+        data.storeResult = false
+        findBar.onFindResult = originalOnFindResult
+        findBar.updateControlState = originalUpdateControlState
+        findBar.onFindResult(data)
+        callback()
 
-    callback = ->
-      message = findBar._findStatusDesc.textContent
-      vim.notify(message) if message
-      findStorage.busy = false
+      findBar.updateControlState = (args...) ->
+        # Firefox inconsistently _doesn’t_ re-open the find bar if there are no
+        # matches here, so no need to take care of that in this case.
+        findBar.onFindResult = originalOnFindResult
+        findBar.updateControlState = originalUpdateControlState
+        findBar.updateControlState(args...)
+        callback()
 
-    findBar.onFindAgainCommand(not direction)
+      callback = ->
+        message = findBar._findStatusDesc.textContent
+        vim.notify(message) if message
+        findStorage.busy = false
+
+      findBar.onFindAgainCommand(not direction)
   )
 
 commands.find_next     = helper_find_again.bind(null, FORWARD)
@@ -1038,7 +1039,9 @@ commands.esc = ({vim}) ->
   vim.window.gURLBar.closePopup()
 
   utils.blurActiveBrowserElement(vim)
-  vim.window.gBrowser.getFindBar().close()
+  findBar = vim.window.gBrowser.getCachedFindBar()
+  if findBar
+    findBar.close()
 
   # Better safe than sorry.
   MarkerContainer.remove(vim.window)
